@@ -1,0 +1,180 @@
+---
+title: "Análisis de datos"
+date: "`r format(Sys.time(), '%A %d %B %Y %X')`"
+output: 
+  html_document: 
+    toc: yes
+    code_folding: hide
+    toc_float: 
+      collapsed: true
+      smooth_scroll: false
+      number_sections: true
+editor_options: 
+  chunk_output_type: console
+---
+
+# Setup
+
+```{r setup}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+options(scipen=9999) # desactivar notacion cientifica
+```
+
+```{css, echo=FALSE}
+# /* expandir el espacio del documento*/
+body .main-container {
+      max-width: 1600px !important;
+      width: 1600px !important;
+    }
+
+#/* expandir width de la TOC*/
+div.tocify {
+    width: 22% !important;
+    max-width: 331px !important;
+    max-height: 102% !important;
+}
+```
+
+
+## Librerías
+
+```{r}
+if (!require("pacman")) install.packages("pacman") # instalar pacman
+pacman::p_load(dplyr,       # Manipulacion de datos 
+               haven,       # importar datos en .dta o .sav
+               sjmisc,      # descriptivos y frecuencias
+               sjPlot,      # tablas, plots y descriptivos
+               summarytools,# resumen de dataframe
+               texreg,      # tablas de regresion
+               knitr,       # tablas kable
+               kableExtra,  # tablas kable personalizadas
+               ggplot2,     # plots
+               )
+```
+
+## Datos
+```{r}
+load(file = "../input/data/proc/df_final.Rdata" )
+```
+
+# Análisis
+
+## Descriptivos 
+
+```{r tabla_datos_gráfico, echo=TRUE}
+#Ejemplo: [VARIABLE = conf_presi] y [VAR_Z = ola]
+a <- data.frame((table(df_final$estatus,df_final$ola)))
+b <- a %>% group_by(Var2) %>% 
+  transmute(porcentaje=Freq/sum(Freq)) %>% 
+  rename(ola=Var2)
+b$ola <- NULL
+datos.grafico<- cbind(a,b)
+```
+
+```{r bar_x_categoría, echo=TRUE}
+#Nombrar el gráfico (c.1.1) y seleccionar datos (datos.grafico)
+c.1.1 <-datos.grafico %>% 
+    #indicar el contenido del gráfico: ejes y relleno (fill) por ola
+    ggplot(aes(y = porcentaje, x = Var1, fill = Var2, 
+               label = as.character(scales::percent(porcentaje, accuracy = .1)))) +
+    #fijar el fondo y el marco del gráfico uniforme
+    theme_bw() + 
+    #geom_col para usar variable y=porcentaje. 'dodge2' para formato side-to-side
+    geom_col(position= 'dodge2') +
+    #escala del eje y en porcentajes del 0 al 100%
+    scale_y_continuous(labels = scales::percent,
+                       limits = c(0, 1)) +
+    #Nombres de los ejes se eliminan
+    ylab(label = NULL) +
+    xlab(label = NULL) +
+    #colores oficiales por ola: degradé 'viridis'
+    scale_fill_viridis_d(begin = .33, end = .66, direction = -1, option = 'viridis') +
+    #etiquetas por sobre cada barra
+    geom_text(vjust = -0.8,
+              position = position_dodge(width = .9),
+              size= 2.75) +
+    #posicionamiento de leyenda arriba
+    theme(legend.position = 'top',
+          legend.title = element_blank()) +
+    #titulo del gráfico
+    ggtitle('Estatus Social Subjetivo según año')
+
+c.1.1
+ggsave(c.1.1,filename = "freq_ess.png",device = "png",path = "../output/images/")
+```
+
+```{r}
+#Paso 1
+a1 <- data.frame(table(df_final$estatus,df_final$ola,df_final$idencuesta))
+a1 <- a1 %>% dplyr::filter(Freq>0)
+a2 <- a1 %>% group_by(Var2) %>% transmute(porcentaje=Freq/sum(Freq)) 
+a2$Var2 <- NULL
+datos.d.1<- cbind(a1,a2)
+datos.d.1 <- na.omit(datos.d.1)
+
+#Paso 2
+b1 <- data.frame(table(df_final$estatus,df_final$ola))
+b2 <- b1 %>% 
+  group_by(Var2) %>% 
+  transmute(porcentaje=Freq/sum(Freq)) %>% 
+  mutate(idencuesta = 1)
+b2$Var2 <- NULL
+etiquetas.d.1<- cbind(b1,b2)
+etiquetas.d.1 <- na.omit(etiquetas.d.1)
+```
+
+```{r gráfíco alluvial .d.1: idcoal 4 olas}
+d.1 <- ggplot(datos.d.1, aes(x = Var2, fill = Var1, stratum = Var1,
+                             alluvium = Var3, y = porcentaje))+
+    ggalluvial::geom_flow(alpha = .66) + 
+    ggalluvial::geom_stratum(linetype = 0) +
+    scale_y_continuous(labels = scales::percent) + 
+    ylab(label = NULL) +
+    xlab(label = NULL) + 
+    theme(legend.position = 'top',
+          legend.title = element_blank()) +
+    scale_fill_viridis_d(begin = 0, end = .85, direction = -1, option = 'viridis') +
+  ggtitle('Cambio de frecuencias de Estatus Subjetivo según año')
+
+d.1
+ggsave(d.1,filename = "alluv_ess.png",device = "png",path = "../output/images/")
+```
+
+## Estimaciones - modelos
+
+```{r results='asis'}
+m1 <- lm(ess~sexo,data = df_final)
+m2 <- lm(ess~sexo+edad,data = df_final)
+m3 <- lm(ess~sexo+edad+educacion,data = df_final)
+m4 <- lm(ess~sexo+edad+educacion+ola,data = df_final)
+
+cap <- "Modelos de regresión para autos y sus partes." # Titulo de tabla
+custom.coef.names = c( # Custom names para coeficientes:                                                     
+  "Intercepto",
+  "Sexo: mujer",
+  "30-49",
+  "50-64",
+  "65 o más",
+  "Media",
+  "Técnica",
+  "Universitaria",
+  "2017",
+  "2018",
+  "2019"
+  )
+# Custom footnote de tabla: 
+custom.note = "$^{***}$p < 0,001;$^{**}$p < 0,01;$^{*}$p < 0,05"
+# texreg::knitreg() decide si usar formato tabla html o latex según corresponda. 
+texreg::knitreg(list(m1,m2,m3,m4),                     # Modelos 1, 2, 3 y 4
+                caption = cap,                          # Titulo
+                caption.above = T,                      # Titulo de tabla arriba
+                custom.coef.names = custom.coef.names,  # Definir custom names para coeficientes
+                custom.note = custom.note,              # Definir footnote de tabla
+                booktabs = TRUE,                        # Usar líneas horizontales en tabla
+                scalebox = 0.75,                        # tamaño de tabla a .75
+                float.pos = "hp!"
+)                        
+```
+
+
+

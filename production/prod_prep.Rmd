@@ -1,0 +1,216 @@
+---
+title: "Preparación de datos"
+date: "`r format(Sys.time(), '%A %d %B %Y %X')`"
+output: 
+  html_document: 
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+      number_sections: yes
+    code_folding: show  
+    number_sections: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+# Setup
+
+```{r setup}
+knitr::opts_chunk$set(warning = FALSE, 
+                      message = FALSE, 
+                      echo = TRUE 
+                      )
+options(scipen=9999) # desactivar notacion cientifica
+remove(list = ls()) #limpieza del entorno de trabajo
+```
+
+```{css, echo=FALSE}
+# /* expandir el espacio del documento*/
+body .main-container {
+      max-width: 1600px !important;
+      width: 1600px !important;
+    }
+#/* expandir width de la TOC*/
+div.tocify {
+    width: 22% !important;
+    max-width: 331px !important;
+    max-height: 102% !important;
+}
+```
+
+## Librerías
+
+```{r}
+if (!require("pacman")) install.packages("pacman") # instalar pacman
+                            # cargar librerias
+pacman::p_load(dplyr,       # Manipulacion de datos 
+               car,         # recodificar variables
+               sjlabelled,  # etiquetado de variables
+               sjmisc,      # descriptivos y frecuencias
+               sjPlot,      # tablas, plots y descriptivos
+               summarytools,# resumen de dataframe
+               panelr,      # datos panel 
+               stringr,     # manejo de vector de caracteres
+               survey,      # diseno muestral complejo
+               ggrepel,     # etiquetas en ggplo2
+               tidyverse    # ggplot2 + librerias complementarias
+               )
+```
+
+## Datos
+
+Para este ejemplo se va utilizar una base de datos longitudinal de ELSOC para las olas 2016, 2017, 2018 y 2019. Emplearemos un enlace directo para descargar la base de datos desde dataverse:
+
+```{r}
+load(url("https://dataverse.harvard.edu/api/access/datafile/4606527"))
+```
+
+### Selección de variables
+
+```{r}
+elsoc_wide <- 
+  elsoc_wide_2016_2019 %>%  #filtrar atrición entre 2016-19 y casos c/inconsistencias mayores
+  dplyr::filter(tipo_atricion==1 & tipo_caso !=2) %>% 
+  dplyr::select(
+    idencuesta, #identificador individual
+    ponderador01_w01,ponderador01_w02,ponderador01_w03,ponderador01_w04, #ponderador población
+    ponderador02_w01,ponderador02_w02,ponderador02_w03,ponderador02_w04, #ponderador sexo
+    m0_sexo_w01,m0_sexo_w02,m0_sexo_w03,m0_sexo_w04, #sexo
+    m0_edad_w01,m0_edad_w02,m0_edad_w03,m0_edad_w04, #edad
+    m01_w01,m01_w02,m01_w03,m01_w04,                 #nivel de educación
+    d01_01_w01,d01_01_w02,d01_01_w03,d01_01_w04      #estatus social subjetivo
+  )
+```
+
+## Transformar base de datos de wide a long
+
+Antes de trasformar la base de datos de wide a long, se debe tener claro el nombre de la etiqueta de periodo asociada a cada variable. En este caso, como se indicó, dicha etiqueta es el sufijo "_w0", habiendo cuatro casos asociados a cada ola: "_w01", "_w02", "_w03" y "_w04". Estos corresponden al años 2016, 2017, 2018 y 2019, respectivamente. Teniendo esta información clara se puede completar los argumentos de la función `long_panel` del paquete `panelr`. Para mayor información del uso de `long_panel` visitar el [link](https://rdrr.io/cran/panelr/man/long_panel.html).
+
+```{r Transformar bbdd de wide a long}
+elsoc_long <- 
+  panelr::long_panel(
+    data = elsoc_wide,#base de datos formato wide
+    prefix = "_w0",   #caracteres antes de la etiqueta de cada ola
+    begin = 1,       #etiqueta de la primera ola
+    end = 4,         #etiqueta de la última ola
+    label_location = "end", #indica donde se localiza la etiqueta asociada a la ola
+    id = "idencuesta", #indica identificador individual
+    wave = "ola")     #nombre que tomará la variable que indica periodo. 
+```
+
+Finalmente, filtramos la base de datos long de casos perdidos.
+
+```{r Recode de casos perdidos en NA}
+elsoc_long[elsoc_long==-999 | elsoc_long==-888] <- NA #recodificar No sabe y No responde en NA
+sum(is.na(elsoc_long)) #indica cantidad de NA
+elsoc_long <- na.omit(elsoc_long) #filtrar NA de la BBDD
+sum(is.na(elsoc_long)) #indica cantidad de NA
+```
+
+# Preparación
+
+En esta sección se realizará la preparación de datos. Se sugiere seguir los siguientes pasos para cada variable:
+
+| Paso                      | Función                         |
+|---------------------------|---------------------------------|
+| 1. Descriptivo inicial    | sjmisc::frq() o sjmisc::descr() |
+| 2. Recodificación         | car::recode()                   |
+| 3. Etiquetado de valores  | sjlabelled::set_labels()        |
+| 4. Etiquetado de variable | sjlabelled::set_label()         |
+| 5. Descriptivo final      | sjmisc::frq o sjmisc::descr()   |
+
+## Variables 
+
+### Ola de medición
+
+```{r}
+sjmisc::frq(elsoc_long$ola)
+elsoc_long$ola <- factor(elsoc_long$ola,labels = c('2016', '2017', '2018', '2019'),ordered = T)
+elsoc_long$ola <- sjlabelled::set_label(elsoc_long$ola, label = c("Ola de Medición"))
+sjmisc::frq(elsoc_long$ola)
+```
+
+### Edad
+
+```{r}
+#Recode variable "m0_edad" / rename "edad"
+sjmisc::descr(elsoc_long$m0_edad)
+elsoc_long$edad <- factor(car::recode(elsoc_long$m0_edad, "18:29=1;30:49=2;50:64=3;65:150=4"),
+                           labels = c('18-29', '30-49', '50-64', '65 o más'))
+elsoc_long$edad <- sjlabelled::set_label(elsoc_long$edad, label = c("Edad en Tramos")) 
+sjmisc::frq(elsoc_long$edad)
+```
+### Sexo
+
+```{r}
+#Recode variable "m0_sexo" / rename "sexo".
+sjmisc::frq(elsoc_long$m0_sexo)
+elsoc_long$sexo <- factor(elsoc_long$m0_sexo,labels = c('Hombre', 'Mujer'))
+elsoc_long$sexo <- sjlabelled::set_label(elsoc_long$sexo, label = c("Tipo de sexo"))
+sjmisc::frq(elsoc_long$sexo)
+```
+
+### Nivel educacional
+
+```{r}
+#Recode variable "m01" nivel educacional / rename "educacion"
+sjmisc::frq(elsoc_long$m01)
+elsoc_long$educacion <- car::recode(elsoc_long$m01,"c(1,2,3)=1;c(4,5)=2;c(6,7)=3;c(8,9,10)=4")
+elsoc_long$educacion <- factor(elsoc_long$educacion,labels = c("Basica","Media","Tecnica","Universitaria"))
+elsoc_long$educacion <- sjlabelled::set_label(elsoc_long$educacion, label = c("Nivel Educacional"))
+sjmisc::frq(elsoc_long$educacion)
+```
+
+### Estatus subjetivo
+
+**Categórica**
+
+```{r}
+#Variable "d01_01" estatus social subjetivo / rename "estatus".
+sjmisc::frq(elsoc_long$d01_01)
+elsoc_long$estatus <- elsoc_long$d01_01
+elsoc_long$estatus <- car::recode(elsoc_long$estatus,"c(0,1,2)=1;c(3,4)=2;c(5,6)=3;c(7,8)=4;c(9,10,11)=5") 
+elsoc_long$estatus <- factor(elsoc_long$estatus,levels = 1:5,c("Bajo","Medio bajo","Medio","Medio alto","Alto"))
+elsoc_long$estatus <- sjlabelled::set_label(elsoc_long$estatus, label = c("Estatus Social Subjetivo")) 
+sjmisc::frq(elsoc_long$estatus)
+```
+
+**Numérica**
+
+```{r}
+#Variable "d01_01" estatus social subjetivo / rename "estatus".
+sjmisc::frq(elsoc_long$d01_01)
+elsoc_long$ess <- elsoc_long$d01_01
+elsoc_long$ess <- remove_labels(elsoc_long$ess,labels = c(1,2))
+elsoc_long$ess <- sjlabelled::set_label(elsoc_long$ess, label = c("Estatus Social Subjetivo (c)")) 
+sjmisc::frq(elsoc_long$ess)
+```
+
+# Seleccionar variables
+
+```{r}
+df_final<- 
+  elsoc_long %>%
+  dplyr::select(ola,
+                edad,
+                sexo,
+                educacion,
+                estatus,
+                ess)
+```
+
+# Resumen 
+
+```{r,results='asis', echo=FALSE}
+sjPlot::view_df(df_final)
+```
+
+# Guardar datos
+
+```{r}
+save(df_final,file = "../input/data/proc/df_final.Rdata")
+```
+
+
+
