@@ -38,7 +38,8 @@ repro-lisa/ (la carpeta principal del proyecto)
 │   │       logo-elsoc.png
 │   │
 │   └───prereg (subcarpeta de input con documentación para preregistro)
-│           preregistro.pdf
+│           preregistro.Rmd (plantilla de preregistro)
+│           preregistro.pdf (preregistro en pdf)
 │
 ├───procesamiento: (rutinas de código de preparación y análisis de datos)
 │       readme-proc.md (documento que describe el contenido de Procesamiento)
