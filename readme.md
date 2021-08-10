@@ -41,6 +41,7 @@ repro-lisa/ (la carpeta principal del proyecto)
 │           preregistro.pdf
 │
 ├───procesamiento: (rutinas de código de preparación y análisis de datos)
+│       readme-proc.md (documento que describe el contenido de Procesamiento)
 │       proc_analisis.Rmd
 │       proc_preparacion.Rmd
 │
