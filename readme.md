@@ -9,6 +9,9 @@ El presente proyecto sigue las directrices del Protocolo IPO ([Castillo, 2020](h
 repro-lisa/ (la carpeta principal del proyecto)
 │
 │   readme.md (documento en el nivel principal con la descripción del proyecto)
+│   paper.Rmd (publicación en formato R Markdown)
+│   paper.pdf (publicación en formato pdf)
+│   paper.html (publicación en formato html)
 │
 ├───input: (archivos de datos y utilidades)
 │   │   readme-input.md (documento que describe el contenido de Input)
